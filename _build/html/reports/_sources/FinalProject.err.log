@@ -1,0 +1,229 @@
+Traceback (most recent call last):
+  File "C:\Users\glenl\anaconda3\Lib\site-packages\jupyter_cache\executors\utils.py", line 58, in single_nb_execution
+    executenb(
+  File "C:\Users\glenl\anaconda3\Lib\site-packages\nbclient\client.py", line 1305, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\glenl\anaconda3\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\glenl\anaconda3\Lib\asyncio\base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\glenl\anaconda3\Lib\site-packages\nbclient\client.py", line 705, in async_execute
+    await self.async_execute_cell(
+  File "C:\Users\glenl\anaconda3\Lib\site-packages\nbclient\client.py", line 1058, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\glenl\anaconda3\Lib\site-packages\nbclient\client.py", line 914, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import sqlite3
+import csv
+import os
+
+# Define the database file path
+db_file_path = 'churn_database.db'
+
+# Step 1: Check if the database exists and delete it if so
+if os.path.exists(db_file_path):
+    os.remove(db_file_path)
+    print("Existing database deleted!")
+
+# Step 2: Connect to SQLite database (this will create a new empty database)
+conn = sqlite3.connect(db_file_path)
+cursor = conn.cursor()
+
+# Step 2: Create Tables (Normalized in 3NF)
+
+# Customers Table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Customers (
+    CustomerID TEXT PRIMARY KEY,
+    ChurnLabel TEXT,
+    Gender TEXT,
+    Age INTEGER,
+    Under30 TEXT,
+    Senior TEXT,
+    GroupFlag TEXT,
+    GroupSize INTEGER
+)
+''')
+
+# Plans Table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Plans (
+    PlanID INTEGER PRIMARY KEY AUTOINCREMENT,
+    CustomerID TEXT,
+    IntlActive TEXT,
+    IntlPlan TEXT,
+    UnlimitedDataPlan TEXT,
+    ExtraDataCharges INTEGER,
+    ExtraInternationalCharges INTEGER,
+    FOREIGN KEY (CustomerID) REFERENCES Customers(CustomerID)
+)
+''')
+
+# Contracts Table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Contracts (
+    ContractID INTEGER PRIMARY KEY AUTOINCREMENT,
+    CustomerID TEXT,
+    DeviceProtection TEXT,
+    ContractType TEXT,
+    PaymentMethod TEXT,
+    FOREIGN KEY (CustomerID) REFERENCES Customers(CustomerID)
+)
+''')
+
+# Usage Table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Usage (
+    UsageID INTEGER PRIMARY KEY AUTOINCREMENT,
+    CustomerID TEXT,
+    AccountLength INTEGER,
+    LocalCalls INTEGER,
+    LocalMins REAL,
+    IntlCalls INTEGER,
+    IntlMins REAL,
+    CustomerServiceCalls INTEGER,
+    AvgMonthlyGB INTEGER,
+    MonthlyCharge REAL,
+    TotalCharges REAL,
+    FOREIGN KEY (CustomerID) REFERENCES Customers(CustomerID)
+)
+''')
+
+# Location Table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Location (
+    LocationID INTEGER PRIMARY KEY AUTOINCREMENT,
+    CustomerID TEXT,
+    State TEXT,
+    PhoneNumber TEXT,
+    FOREIGN KEY (CustomerID) REFERENCES Customers(CustomerID)
+)
+''')
+
+# Step 3: Read data from CSV file
+csv_file_path = "Databel - Data.csv"
+
+# Lists to hold rows for each table
+customers_data = []
+plans_data = []
+contracts_data = []
+usage_data = []
+location_data = []
+
+with open(csv_file_path, 'r') as file:
+    reader = csv.DictReader(file)
+
+    for row in reader:
+        # Prepare Customers data (includes churn and group size)
+        customers_data.append((
+            row['Customer ID'],
+            row['Churn Label'],
+            row['Gender'],
+            int(row['Age']),
+            row['Under 30'],
+            row['Senior'],
+            row['Group'],
+            int(row['Number of Customers in Group'])
+        ))
+
+        # Prepare Plans data
+        plans_data.append((
+            row['Customer ID'],
+            row['Intl Active'],
+            row['Intl Plan'],
+            row['Unlimited Data Plan'],
+            int(row['Extra Data Charges']),
+            float(row['Extra International Charges'])
+        ))
+
+        # Prepare Contracts data
+        contracts_data.append((
+            row['Customer ID'],
+            row['Device Protection & Online Backup'],
+            row['Contract Type'],
+            row['Payment Method']
+        ))
+
+        # Prepare Usage data
+        usage_data.append((
+            row['Customer ID'],
+            int(row['Account Length (in months)']),
+            int(row['Local Calls']),
+            float(row['Local Mins']),
+            float(row['Intl Calls']),
+            float(row['Intl Mins']),
+            int(row['Customer Service Calls']),
+            int(row['Avg Monthly GB Download']),
+            float(row['Monthly Charge']),
+            float(row['Total Charges'])
+        ))
+
+        # Prepare Location data
+        location_data.append((
+            row['Customer ID'],
+            row['State'],
+            row['Phone Number']
+        ))
+
+# Step 4: Insert data into tables using executemany()
+
+cursor.executemany('''
+INSERT OR IGNORE INTO Customers (CustomerID, ChurnLabel, Gender, Age, Under30, Senior, GroupFlag, GroupSize)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+''', customers_data)
+
+cursor.executemany('''
+INSERT INTO Plans (CustomerID, IntlActive, IntlPlan, UnlimitedDataPlan, ExtraDataCharges, ExtraInternationalCharges)
+VALUES (?, ?, ?, ?, ?, ?)
+''', plans_data)
+
+cursor.executemany('''
+INSERT INTO Contracts (CustomerID, DeviceProtection, ContractType, PaymentMethod)
+VALUES (?, ?, ?, ?)
+''', contracts_data)
+
+cursor.executemany('''
+INSERT INTO Usage (CustomerID, AccountLength, LocalCalls, LocalMins, IntlCalls, IntlMins, CustomerServiceCalls, AvgMonthlyGB, MonthlyCharge, TotalCharges)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+''', usage_data)
+
+cursor.executemany('''
+INSERT INTO Location (CustomerID, State, PhoneNumber)
+VALUES (?, ?, ?)
+''', location_data)
+
+# Step 5: Commit and close the connection
+conn.commit()
+conn.close()
+
+print("Database created, and all columns loaded successfully!")
+
+------------------
+
+
+[1;31m---------------------------------------------------------------------------[0m
+[1;31mFileNotFoundError[0m                         Traceback (most recent call last)
+Cell [1;32mIn[1], line 98[0m
+[0;32m     95[0m usage_data [38;5;241m=[39m []
+[0;32m     96[0m location_data [38;5;241m=[39m []
+[1;32m---> 98[0m [38;5;28;01mwith[39;00m [38;5;28mopen[39m(csv_file_path, [38;5;124m'[39m[38;5;124mr[39m[38;5;124m'[39m) [38;5;28;01mas[39;00m file:
+[0;32m     99[0m     reader [38;5;241m=[39m csv[38;5;241m.[39mDictReader(file)
+[0;32m    101[0m     [38;5;28;01mfor[39;00m row [38;5;129;01min[39;00m reader:
+[0;32m    102[0m         [38;5;66;03m# Prepare Customers data (includes churn and group size)[39;00m
+
+File [1;32m~\anaconda3\Lib\site-packages\IPython\core\interactiveshell.py:324[0m, in [0;36m_modified_open[1;34m(file, *args, **kwargs)[0m
+[0;32m    317[0m [38;5;28;01mif[39;00m file [38;5;129;01min[39;00m {[38;5;241m0[39m, [38;5;241m1[39m, [38;5;241m2[39m}:
+[0;32m    318[0m     [38;5;28;01mraise[39;00m [38;5;167;01mValueError[39;00m(
+[0;32m    319[0m         [38;5;124mf[39m[38;5;124m"[39m[38;5;124mIPython won[39m[38;5;124m'[39m[38;5;124mt let you open fd=[39m[38;5;132;01m{[39;00mfile[38;5;132;01m}[39;00m[38;5;124m by default [39m[38;5;124m"[39m
+[0;32m    320[0m         [38;5;124m"[39m[38;5;124mas it is likely to crash IPython. If you know what you are doing, [39m[38;5;124m"[39m
+[0;32m    321[0m         [38;5;124m"[39m[38;5;124myou can use builtins[39m[38;5;124m'[39m[38;5;124m open.[39m[38;5;124m"[39m
+[0;32m    322[0m     )
+[1;32m--> 324[0m [38;5;28;01mreturn[39;00m io_open(file, [38;5;241m*[39margs, [38;5;241m*[39m[38;5;241m*[39mkwargs)
+
+[1;31mFileNotFoundError[0m: [Errno 2] No such file or directory: 'Databel - Data.csv'
+
